@@ -1,0 +1,165 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  DEVELOPER
+  MANAGER
+}
+
+enum ContractStatus {
+  DRAFT
+  PENDING_CLIENT
+  PENDING_DEVELOPER
+  PENDING_PAYMENT
+  PARTIALLY_SIGNED
+  FULLY_SIGNED
+  COMPLETED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum PaymentMethod {
+  STRIPE
+  PAYPAL
+  FLUTTERWAVE
+  MTN_MOMO
+  AIRTEL_MONEY
+  MPESA
+  BANK_TRANSFER
+}
+
+model User {
+  id              String         @id @default(cuid())
+  email           String         @unique
+  passwordHash    String
+  fullName        String
+  role            UserRole
+  twoFactorEnabled Boolean       @default(false)
+  lastLogin       DateTime?
+  contracts       Contract[]     @relation("Developer")
+  signatures      SignatureAudit[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("users")
+}
+
+model Client {
+  id              String         @id @default(cuid())
+  companyName     String
+  contactPerson   String?
+  email           String         @unique
+  phone           String?
+  address         String?
+  country         String?
+  taxId           String?
+  contracts       Contract[]
+  accessCodes     ContractAccess[]
+  signatures      SignatureAudit[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("clients")
+}
+
+model Contract {
+  id                 String         @id @default(cuid())
+  contractRef        String         @unique
+  clientId           String
+  client             Client         @relation(fields: [clientId], references: [id])
+  title              String
+  description        String?
+  amount             Float
+  currency           String         @default("USD")
+  
+  // Signatures
+  clientSignature    String?        @db.Text
+  clientSignedAt     DateTime?
+  developerSignature String?        @db.Text
+  developerSignedAt  DateTime?
+  developerId        String?
+  developer          User?          @relation("Developer", fields: [developerId], references: [id])
+  
+  // Status
+  status             ContractStatus @default(DRAFT)
+  paymentStatus      PaymentStatus  @default(PENDING)
+  paymentMethod      PaymentMethod?
+  paymentDate        DateTime?
+  transactionId      String?
+  
+  // Dates
+  startDate          DateTime?
+  endDate            DateTime?
+  signedAt           DateTime?
+  
+  // Relations
+  payments           Payment[]
+  accessCodes        ContractAccess[]
+  signatureAudit     SignatureAudit[]
+  
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@map("contracts")
+}
+
+model Payment {
+  id              String         @id @default(cuid())
+  contractId      String
+  contract        Contract       @relation(fields: [contractId], references: [id])
+  amount          Float
+  currency        String         @default("USD")
+  paymentMethod   PaymentMethod
+  transactionId   String         @unique
+  paymentProvider String?
+  status          PaymentStatus  @default(PENDING)
+  metadata        Json?
+  paidAt          DateTime?
+  createdAt       DateTime       @default(now())
+
+  @@map("payments")
+}
+
+model ContractAccess {
+  id            String   @id @default(cuid())
+  contractId    String
+  contract      Contract @relation(fields: [contractId], references: [id])
+  accessCode    String   @unique
+  emailSent     Boolean  @default(false)
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+
+  @@map("contract_access")
+}
+
+model SignatureAudit {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id])
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  clientId   String?
+  client     Client?  @relation(fields: [clientId], references: [id])
+  action     String
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@map("signature_audit")
+}
